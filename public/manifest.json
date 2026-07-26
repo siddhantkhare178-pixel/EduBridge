@@ -1,0 +1,39 @@
+{
+  "name": "EduBridge - Learning Platform",
+  "short_name": "EduBridge",
+  "description": "Offline-first learning platform with courses, quizzes, and AI tutoring",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#3b82f6",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/Gemini_Generated_Image_v4mxwev4mxwev4mx.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/Gemini_Generated_Image_v4mxwev4mxwev4mx.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/Gemini_Generated_Image_v4mxwev4mxwev4mx.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/Gemini_Generated_Image_v4mxwev4mxwev4mx.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "categories": ["education", "productivity"],
+  "lang": "en",
+  "dir": "ltr"
+}

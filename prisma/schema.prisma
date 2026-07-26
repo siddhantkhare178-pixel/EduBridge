@@ -1,0 +1,396 @@
+// Prisma schema for EduBridge
+// Database: Neon (PostgreSQL)
+// Run: pnpm prisma migrate dev
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  STUDENT
+  TEACHER
+}
+
+// NextAuth core models
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  role          Role?
+  passwordHash  String?
+
+  // Gamification fields
+  totalPoints      Int      @default(0)
+  currentStreak    Int      @default(0)
+  longestStreak    Int      @default(0)
+  lastActivityDate DateTime?
+  level            Int      @default(1)
+
+  accounts Account[]
+  sessions Session[]
+
+  // App relations
+  courses        Course[]        @relation("CourseAuthor")
+  enrollments    Enrollment[]
+  threads        Thread[]
+  replies        Reply[]
+  progresses     Progress[]
+  payments       Payment[]
+  achievements     Achievement[]
+  quizAttempts     QuizAttempt[]
+  customQuizzes    CustomQuiz[]
+  announcements    Announcement[]
+  announcementLikes AnnouncementLike[]
+  learningSessions LearningSession[]
+  revisionSessions RevisionSession[]
+  revisionStreak   RevisionStreak?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// App domain models
+model Course {
+  id          String  @id @default(cuid())
+  title       String
+  description String
+  price       Decimal @default(0)
+  status      String  @default("draft") // draft|published|archived
+  createdById String
+  createdBy   User    @relation("CourseAuthor", fields: [createdById], references: [id])
+
+  lessons       Lesson[]
+  enrollments   Enrollment[]
+  threads       Thread[]
+  payments      Payment[]
+  announcements Announcement[]
+  learningSessions LearningSession[]
+  revisionSessions RevisionSession[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([createdById])
+}
+
+model Lesson {
+  id            String   @id @default(cuid())
+  courseId      String
+  title         String
+  description   String?
+  contentURL    String?  // Keep for backward compatibility
+  contentTypes  String[] // Array of content types: ["text", "links", "video"]
+  textContent   String?  // For text/notes content
+  externalLinks String[] // Array of external links
+  videoType     String?  // "upload" or "youtube"
+  videoUrl      String?  // Cloudinary video URL
+  videoPublicId String?  // Cloudinary public ID
+  youtubeUrl    String?  // For YouTube URL or embed code
+  videoFileName String?  // For uploaded video file name (deprecated)
+  order         Int
+
+  course   Course     @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  progress Progress[]
+  learningSessions LearningSession[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([courseId])
+}
+
+model Enrollment {
+  id       String @id @default(cuid())
+  userId   String
+  courseId String
+  status   String @default("active") // active|completed|canceled
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, courseId])
+  @@index([courseId])
+}
+
+model Progress {
+  id          String    @id @default(cuid())
+  userId      String
+  lessonId    String
+  percent     Int       @default(0)
+  completedAt DateTime?
+  pointsEarned Int      @default(0)
+  timeSpent   Int       @default(0) // Total time spent in seconds
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, lessonId])
+  @@index([lessonId])
+}
+
+// New model to track daily learning sessions
+model LearningSession {
+  id        String   @id @default(cuid())
+  userId    String
+  lessonId  String
+  courseId  String
+  startTime DateTime
+  endTime   DateTime?
+  duration  Int      @default(0) // Duration in seconds
+  date      DateTime // Date for aggregation (start of day)
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, date])
+  @@index([lessonId])
+  @@index([courseId])
+}
+
+model Thread {
+  id       String  @id @default(cuid())
+  title    String
+  body     String
+  authorId String
+  courseId String?
+
+  author  User    @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  course  Course? @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  replies Reply[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([authorId])
+  @@index([courseId])
+}
+
+model Reply {
+  id       String @id @default(cuid())
+  body     String
+  authorId String
+  threadId String
+
+  author User   @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  thread Thread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([authorId])
+  @@index([threadId])
+}
+
+model Payment {
+  id       String  @id @default(cuid())
+  userId   String
+  courseId String
+  provider String // stripe
+  amount   Decimal
+  currency String  @default("INR")
+  status   String  @default("pending") // pending|succeeded|failed
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([courseId])
+}
+
+// Gamification Models
+model Achievement {
+  id          String   @id @default(cuid())
+  userId      String
+  type        String   // "first_lesson", "week_streak", "quiz_master", etc.
+  title       String
+  description String
+  points      Int      @default(0)
+  iconUrl     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model CustomQuiz {
+  id          String @id @default(cuid())
+  createdById String
+  title       String
+  description String?
+  topic       String
+  difficulty  String @default("medium") // easy|medium|hard
+  isPublic    Boolean @default(false)
+
+  createdBy User          @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  questions QuizQuestion[]
+  attempts  QuizAttempt[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([createdById])
+  @@index([topic])
+}
+
+model QuizQuestion {
+  id       String   @id @default(cuid())
+  quizId   String
+  question String
+  options  String[] // Array of options
+  correctAnswer Int  // Index of correct answer
+  explanation String?
+  points   Int      @default(10)
+
+  quiz CustomQuiz @relation(fields: [quizId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([quizId])
+}
+
+model QuizAttempt {
+  id          String @id @default(cuid())
+  userId      String
+  quizId      String
+  score       Int
+  totalPoints Int
+  answers     Json   // Store user answers
+  timeSpent   Int    // in seconds
+  completed   Boolean @default(false)
+
+  user User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  quiz CustomQuiz @relation(fields: [quizId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([quizId])
+}
+
+// Announcements Models
+model Announcement {
+  id          String @id @default(cuid())
+  title       String
+  content     String
+  authorId    String
+  courseId    String?
+  isPublic    Boolean @default(false) // If true, visible to all students; if false, only to enrolled students
+
+  author User    @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  course Course? @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  likes  AnnouncementLike[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([authorId])
+  @@index([courseId])
+  @@index([createdAt])
+}
+
+model AnnouncementLike {
+  id             String @id @default(cuid())
+  userId         String
+  announcementId String
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  announcement Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, announcementId])
+  @@index([announcementId])
+}
+
+// Revision Models
+model RevisionSession {
+  id          String @id @default(cuid())
+  userId      String
+  courseId    String
+  topic       String
+  explanation String
+  score       Int
+  feedback    Json   // Store the complete feedback object
+  duration    Int    @default(0) // Time spent in seconds
+  method      String @default("text") // "text" or "voice"
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([courseId])
+  @@index([createdAt])
+}
+
+model RevisionStreak {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  currentStreak Int     @default(0)
+  longestStreak Int     @default(0)
+  lastRevisionDate DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
